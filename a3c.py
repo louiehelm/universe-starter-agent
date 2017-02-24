@@ -171,7 +171,7 @@ should be computed.
         # Only visualise first agent
         if (task > 0):
             visualise = False
-            
+
         self.env = env
         self.task = task
         worker_device = "/job:worker/task:{}/cpu:0".format(task)
@@ -242,8 +242,8 @@ should be computed.
             grads_and_vars = list(zip(grads, self.network.var_list))
             inc_step = self.global_step.assign_add(tf.shape(pi.x)[0])
 
-            # each worker has a different set of adam optimizer parameters
-            opt = tf.train.AdamOptimizer(1e-4)
+            # each worker has a different set of Nadam optimizer parameters
+            opt = tf.train.NadamOptimizer(2e-4)
             self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
             self.summary_writer = None
             self.local_steps = 0
