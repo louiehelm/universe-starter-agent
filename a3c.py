@@ -167,6 +167,11 @@ But overall, we'll define the model, specify its inputs, and describe how the po
 should be computed.
 """
 
+
+        # Only visualise first agent
+        if (task > 0):
+            visualise = False
+            
         self.env = env
         self.task = task
         worker_device = "/job:worker/task:{}/cpu:0".format(task)
