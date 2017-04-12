@@ -2,11 +2,13 @@ from __future__ import print_function
 from collections import namedtuple
 import numpy as np
 import tensorflow as tf
-from model import LSTMPolicy
+from model import GRUPolicy
 import six.moves.queue as queue
 import scipy.signal
 import threading
 import distutils.version
+import os
+from PIL import Image
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
 
 def discount(x, gamma):
@@ -71,7 +73,7 @@ One of the key distinctions between a normal environment and a universe environm
 is that a universe environment is _real time_.  This means that there should be a thread
 that would constantly interact with the environment and tell it what to do.  This thread is here.
 """
-    def __init__(self, env, policy, num_local_steps, visualise):
+    def __init__(self, env, policy, num_local_steps, visualise, task):
         threading.Thread.__init__(self)
         self.queue = queue.Queue(5)
         self.num_local_steps = num_local_steps
@@ -82,6 +84,7 @@ that would constantly interact with the environment and tell it what to do.  Thi
         self.sess = None
         self.summary_writer = None
         self.visualise = visualise
+        self.task = task
 
     def start_runner(self, sess, summary_writer):
         self.sess = sess
@@ -93,7 +96,7 @@ that would constantly interact with the environment and tell it what to do.  Thi
             self._run()
 
     def _run(self):
-        rollout_provider = env_runner(self.env, self.policy, self.num_local_steps, self.summary_writer, self.visualise)
+        rollout_provider = env_runner(self.env, self.policy, self.num_local_steps, self.summary_writer, self.visualise, self.task)
         while True:
             # the timeout variable exists because apparently, if one worker dies, the other workers
             # won't die with it, unless the timeout is set to some large number.  This is an empirical
@@ -103,7 +106,7 @@ that would constantly interact with the environment and tell it what to do.  Thi
 
 
 
-def env_runner(env, policy, num_local_steps, summary_writer, render):
+def env_runner(env, policy, num_local_steps, summary_writer, render, task):
     """
 The logic of the thread runner.  In brief, it constantly keeps on running
 the policy, and as long as the rollout exceeds a certain length, the thread
@@ -123,8 +126,8 @@ runner appends the policy to the queue.
             action, value_, features = fetched[0], fetched[1], fetched[2:]
             # argmax to convert from one-hot
             state, reward, terminal, info = env.step(action.argmax())
-            if render:
-                env.render()
+            if render and not os.path.exists('/tmp/universe%d.bmp' % task):
+                Image.fromarray(env.render('rgb_array'),mode='RGB').save('/tmp/universe%d.bmp' % task, 'BMP')
 
             # collect the experience
             rollout.add(last_state, action, reward, value_, terminal, last_features)
@@ -172,13 +175,13 @@ should be computed.
         worker_device = "/job:worker/task:{}/cpu:0".format(task)
         with tf.device(tf.train.replica_device_setter(1, worker_device=worker_device)):
             with tf.variable_scope("global"):
-                self.network = LSTMPolicy(env.observation_space.shape, env.action_space.n)
+                self.network = GRUPolicy(env.observation_space.shape, env.action_space.n)
                 self.global_step = tf.get_variable("global_step", [], tf.int32, initializer=tf.constant_initializer(0, dtype=tf.int32),
                                                    trainable=False)
 
         with tf.device(worker_device):
             with tf.variable_scope("local"):
-                self.local_network = pi = LSTMPolicy(env.observation_space.shape, env.action_space.n)
+                self.local_network = pi = GRUPolicy(env.observation_space.shape, env.action_space.n)
                 pi.global_step = self.global_step
 
             self.ac = tf.placeholder(tf.float32, [None, env.action_space.n], name="ac")
@@ -206,7 +209,7 @@ should be computed.
             # on the one hand;  but on the other hand, we get less frequent parameter updates, which
             # slows down learning.  In this code, we found that making local steps be much
             # smaller than 20 makes the algorithm more difficult to tune and to get to work.
-            self.runner = RunnerThread(env, pi, 20, visualise)
+            self.runner = RunnerThread(env, pi, 30, visualise, task)
 
 
             grads = tf.gradients(self.loss, pi.var_list)
@@ -238,7 +241,7 @@ should be computed.
             inc_step = self.global_step.assign_add(tf.shape(pi.x)[0])
 
             # each worker has a different set of adam optimizer parameters
-            opt = tf.train.AdamOptimizer(1e-4)
+            opt = tf.train.NadamOptimizer(2e-4)
             self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
             self.summary_writer = None
             self.local_steps = 0
@@ -283,7 +286,6 @@ server.
             self.adv: batch.adv,
             self.r: batch.r,
             self.local_network.state_in[0]: batch.features[0],
-            self.local_network.state_in[1]: batch.features[1],
         }
 
         fetched = sess.run(fetches, feed_dict=feed_dict)
