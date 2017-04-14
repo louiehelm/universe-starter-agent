@@ -8,8 +8,6 @@
 
 - 3 small, initial hyperparameter changes extend these gains even more.
 
-- Using recently added NADAM optimizer vs ADAM
-
 - GRU-based RNNs appear both more stable and more tolerant of a wider hyperparameter space than LSTMs for discrete RL tasks.
 
 - Research cycles were shortened 30% more by MKL-optimized [`manjaro-ml-dotfiles`](https://github.com/louiehelm/manjaro-ml-dotfiles). This improves upon the recommended `universe` dev environment of `ubuntu` + `anaconda`.
@@ -37,15 +35,12 @@ This smaller pool of agents can also solve `PongDeterministic-v3` with fewer tot
 # Minor Changes
 
 * 100% higher learning rate with slower decay
-* ADAM optimizer -> [NADAM optimizer](https://github.com/tensorflow/tensorflow/commit/86d3891ba6612552347beaabe27edac11f5758d7)
 * Local steps increased 20 -> 30
 * 10% dropout
 * Asyncronous visualiser
 
 
 GRUs appear less overwhelmed by higher learning rates and more resilient to a wider range of hyperparams in general.
-
-Google recently accepted my NADAM patches into TensorFlow. It tends to converge faster and more stablely than ADAM in all but pathological cases. GRU-A3C works great with ADAM, but why not use the more principled, higher performance optimizer?
 
 Local steps can scale both lower and higher with GRU-based agents:
 

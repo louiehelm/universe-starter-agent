@@ -241,7 +241,7 @@ should be computed.
             inc_step = self.global_step.assign_add(tf.shape(pi.x)[0])
 
             # each worker has a different set of adam optimizer parameters
-            opt = tf.train.NadamOptimizer(2e-4)
+            opt = tf.train.AdamOptimizer(learning_rate=0.0002, beta1=0.825, beta2=0.99685)
             self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
             self.summary_writer = None
             self.local_steps = 0
